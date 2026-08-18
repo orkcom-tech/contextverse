@@ -110,7 +110,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25.x"
+          go-version: "1.26.x"
       - name: Download modules (retry)
         shell: bash
         run: |
@@ -161,10 +161,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25.x"
+          go-version: "1.26.x"
       # Known vulnerabilities in what we actually call, not merely in what we
       # depend on: govulncheck reports a module only when a reachable path
       # exists, so it stays quiet enough to be worth reading.
+      #
+      # It also reports the STANDARD LIBRARY, which is what pinning the
+      # toolchain costs: govulncheck@latest is installed on every run, so the
+      # day an advisory lands with a fix in a newer Go, a pinned older Go turns
+      # this job red with no change to the code. That is the scanner working —
+      # the fix is to move the toolchain, not to stop asking. It is why the pin
+      # above is a minor line (1.26.x) rather than an exact patch: the newest
+      # patch of the supported major is what carries the fixes.
       - name: Vulnerability check
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
@@ -187,7 +195,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25.x"
+          go-version: "1.26.x"
       - name: Download modules (retry)
         shell: bash
         run: |
@@ -229,7 +237,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25.x"
+          go-version: "1.26.x"
 
       # Signing and the bill of materials. Both are GoReleaser steps; these put
       # the tools on the runner.
