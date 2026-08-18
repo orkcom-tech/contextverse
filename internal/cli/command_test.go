@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,6 +34,25 @@ func run(t *testing.T, args ...string) (string, error) {
 	root.SetOut(&buf)
 	root.SetErr(&buf)
 	root.SetIn(strings.NewReader(""))
+	root.SetArgs(args)
+	err := root.Execute()
+	return buf.String(), err
+}
+
+// runIn is run with something on stdin, for the commands that read a body from
+// it. `file put --from -` is unusable from a test without this.
+func runIn(t *testing.T, stdin io.Reader, args ...string) (string, error) {
+	t.Helper()
+	t.Cleanup(func() {
+		flagSpaceRoot, flagServerDir = "", ""
+		flagJSON, flagYAML, flagDebug = false, false, false
+	})
+
+	var buf bytes.Buffer
+	root := newRoot()
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetIn(stdin)
 	root.SetArgs(args)
 	err := root.Execute()
 	return buf.String(), err

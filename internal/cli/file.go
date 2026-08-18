@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -29,6 +31,7 @@ func newFileCmd() *cobra.Command {
 	cmd.AddCommand(newFileEditCmd())
 	cmd.AddCommand(newFileDiffCmd())
 	cmd.AddCommand(newFileRevertCmd())
+	cmd.AddCommand(newFileDeleteCmd())
 	cmd.AddCommand(newFileUndeleteCmd())
 	cmd.AddCommand(newFileDestroyCmd())
 	return cmd
@@ -250,14 +253,25 @@ func commitBody(cmd *cobra.Command, fl *storage.FileLog, path string, data []byt
 
 func newFilePutCmd() *cobra.Command {
 	var from string
+	var ifVersion string
 	cmd := &cobra.Command{
 		Use:   "put <path>",
 		Short: "Write a file as a new version (from a file or stdin)",
 		Long: `Write content to a path in the space, creating a new version.
 
-The write is compare-and-swap against the current version: if someone else
-changed the file since it was read, the write is rejected rather than silently
-overwriting their version.`,
+The write is compare-and-swap. Without --if-version the comparison is against
+whatever is current at this instant, which stops two writes racing but cannot
+stop the case that actually loses work: somebody read a file an hour ago, wrote
+it back, and overwrote an edit made in between.
+
+Pass --if-version with the version YOU read and the write is rejected if the
+file has moved on since. That is what an editor wants — it turns a silent
+overwrite into a refusal the person can act on — and it is why this flag
+exists: a tool built on contextd could hold the version it read and had no way
+to say so.
+
+    contextd file get team/policy.md             # you are looking at v4
+    contextd file put team/policy.md --from - --if-version v4`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if from == "" {
@@ -279,11 +293,21 @@ overwriting their version.`,
 			if err != nil {
 				return err
 			}
-			_, cur, err := currentBody(cmd, fl, args[0])
+			expected, err := parseVersionFlag(ifVersion)
 			if err != nil {
 				return err
 			}
-			next, err := commitBody(cmd, fl, args[0], data, cur)
+			if expected == "" {
+				// No expectation given: the comparison is against what is
+				// current right now, which is what this command has always
+				// done and what a script piping into it wants.
+				_, cur, cerr := currentBody(cmd, fl, args[0])
+				if cerr != nil {
+					return cerr
+				}
+				expected = cur
+			}
+			next, err := commitBody(cmd, fl, args[0], data, expected)
 			if err != nil {
 				return err
 			}
@@ -293,6 +317,8 @@ overwriting their version.`,
 		},
 	}
 	cmd.Flags().StringVar(&from, "from", "", "read content from this file, or - for stdin")
+	cmd.Flags().StringVar(&ifVersion, "if-version", "",
+		"only write if the file is still at this version, e.g. v4")
 	return cmd
 }
 
@@ -425,6 +451,114 @@ func newFileRevertCmd() *cobra.Command {
 	}
 	cmd.Flags().IntVarP(&version, "version", "v", 0, "version to restore as new current")
 	_ = cmd.MarkFlagRequired("version")
+	return cmd
+}
+
+// FileDeleted is the structured form of `file delete`.
+type FileDeleted struct {
+	Path    string `json:"path" yaml:"path"`
+	Deleted bool   `json:"deleted" yaml:"deleted"`
+	// Version is the version that was live when it was removed. History keeps
+	// it, and `file undelete` brings it back.
+	Version string `json:"version" yaml:"version"`
+}
+
+// newFileDeleteCmd exposes SoftDelete, which the storage layer has always had
+// and no command could reach.
+//
+// The gap was visible from the outside and impossible to act on: `file
+// undelete` restores a soft-deleted file and `file destroy` refuses a live
+// version with "cannot destroy current live version — soft-delete first", so
+// the CLI told you to do a thing it gave you no way to do. Anything built on
+// contextd — a memory an agent keeps, a document an operator wants gone — had
+// to settle for emptying the file and calling that forgetting.
+//
+// Soft, not hard, and that is the whole design rather than a shortcut: the
+// live copy goes and the history stays, so a delete is reversible with
+// undelete and a version is destroyed one at a time, deliberately, with
+// destroy. A context space is a record of what a team knew; making it easy to
+// remove the record without meaning to would be the wrong favour.
+// parseVersionFlag reads what a PERSON would paste into --if-version.
+//
+// Every command in this CLI prints a version through DisplayVersion, which
+// renders it "v4". The storage layer's own token is the bare "4", and
+// ParseFileVersion rejects anything else. So a flag that passed its value
+// straight through refused the exact string the user was just shown — which is
+// not a validation, it is a trap. Both forms are accepted here, at the one
+// boundary where a human types one.
+func parseVersionFlag(v string) (storage.Version, error) {
+	s := strings.TrimSpace(v)
+	if s == "" {
+		return "", nil
+	}
+	s = strings.TrimPrefix(s, "v")
+	if n, err := strconv.Atoi(s); err != nil || n < 1 {
+		return "", fmt.Errorf("--if-version must be a version like v4, not %q", v)
+	}
+	return storage.Version(s), nil
+}
+
+func newFileDeleteCmd() *cobra.Command {
+	var ifVersion string
+	cmd := &cobra.Command{
+		Use:   "delete <path>",
+		Short: "Remove a file from the space, keeping its history",
+		Long: `Remove the live copy of a file. Its history is kept.
+
+The write is compare-and-swap against the current version, so a file somebody
+else changed since you read it is not removed out from under them. Pass
+--if-version to state the version YOU read; without it the check is against
+whatever is current at this instant.
+
+Bring it back with ` + "`contextd file undelete <path>`" + `. To remove a
+historical version for good, use ` + "`contextd file destroy`" + `.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := args[0]
+			fl, err := openFileLog()
+			if err != nil {
+				return err
+			}
+
+			expected, err := parseVersionFlag(ifVersion)
+			if err != nil {
+				return err
+			}
+			if expected == "" {
+				// No expectation given: read the current version and use it, so
+				// the CAS still holds against a concurrent writer. This is the
+				// same thing `file put` does.
+				_, cur, cerr := currentBody(cmd, fl, path)
+				if cerr != nil {
+					return cerr
+				}
+				expected = cur
+			}
+
+			if err := fl.SoftDelete(cmd.Context(), path, expected); err != nil {
+				return err
+			}
+
+			// The working tree copy goes with it, or the next `file list` shows
+			// a file the space no longer has.
+			if root, _, lerr := loadSpaceConfig(); lerr == nil {
+				abs := filepath.Join(root, filepath.FromSlash(path))
+				if rerr := os.Remove(abs); rerr != nil && !os.IsNotExist(rerr) {
+					logx.L().Warn("remove working tree copy", "path", path, "err", rerr)
+				}
+			}
+
+			logx.L().Info("file deleted", "path", path, "version", string(expected))
+			out := FileDeleted{Path: path, Deleted: true, Version: storage.DisplayVersion(expected)}
+			return emit(cmd.OutOrStdout(), out, func(w io.Writer) error {
+				fmt.Fprintf(w, "deleted %s (was %s) — history kept; restore with: contextd file undelete %s\n",
+					out.Path, out.Version, out.Path)
+				return nil
+			})
+		},
+	}
+	cmd.Flags().StringVar(&ifVersion, "if-version", "",
+		"only delete if the file is still at this version, e.g. v4")
 	return cmd
 }
 

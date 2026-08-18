@@ -28,6 +28,7 @@ contextd file put <path> --from FILE|-   # write from a file or stdin
 contextd file get <path> [-v N]          # print the body of any version
 contextd file history <path>             # who changed it, and when
 contextd file revert <path> -v N         # bring an old version back as current
+contextd file delete <path>              # remove the live copy, keep the history
 contextd file undelete <path>            # restore a soft-deleted file
 contextd file destroy <path> -v N        # permanently remove one version
 contextd file diff <path>                # what changed between two versions
@@ -46,6 +47,42 @@ contextd index update                    # regenerate space-index.md
 contextd template list                   # browse the template catalog
 contextd freshness check|nag|validate    # stale context and its owners
 ```
+
+### Removing a file, and getting it back
+
+`delete` removes the live copy and keeps every version:
+
+```bash
+contextd file delete team/policy.md
+# deleted team/policy.md (was v4) — history kept; restore with: contextd file undelete team/policy.md
+
+contextd file undelete team/policy.md
+```
+
+It is soft on purpose. A context space is a record of what a team knew, and the
+easy operation should be the reversible one. To remove a version for good, name
+it: `contextd file destroy <path> -v N`.
+
+### `--if-version`: writing without overwriting somebody
+
+Both `put` and `delete` are compare-and-swap. Without a flag the comparison is
+against whatever is current at that instant, which stops two writes racing —
+but not the case that actually loses work: somebody read a file an hour ago,
+wrote it back, and overwrote an edit made in between.
+
+`--if-version` is how a caller states the version **it** read:
+
+```bash
+contextd file get team/policy.md            # you are looking at v4
+# … somebody else saves v5 …
+contextd file put team/policy.md --from - --if-version v4
+# error: storage conflict on "team/policy.md": expected "4" got "5"
+```
+
+That refusal is the point: an editor can tell the person their copy is stale
+and let them reapply, instead of silently discarding the other version. It
+takes the form every command prints (`v4`) or the bare number.
+
 
 ### Sync and storage
 

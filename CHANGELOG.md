@@ -2,13 +2,31 @@
 
 All notable changes to `contextd` are recorded here.
 
-The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — with one caveat while the major version is `0`:
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> **Pre-1.0 compatibility.** Minor releases may change commands, flags, the HTTP API and the on-disk layout. Pin an exact version if you depend on any of them. Breaking changes are called out under **Changed** with the migration in the same bullet.
+> **From 1.0.0 the version means something.** Commands, flags, the HTTP API and the on-disk layout are stable within a major version: a minor release may add, and will not remove or change the meaning of what is there. Anything that has to break waits for a major, is called out under **Changed**, and carries its migration in the same bullet.
+>
+> Before 1.0.0 that promise did not hold, and the releases between 0.7.0 and 1.0.0 were cut without changelog entries — the git history is the record for those. Said rather than quietly skipped: a changelog with a hole in it is worth less than one that admits where the hole is.
 
 Releases are cut automatically from `main` by CI; the tag and the GitHub release are created in the same run.
 
 ## [Unreleased]
+
+## [1.0.0] — 2026-08-18
+
+### Added
+
+- **`contextd file delete <path>`.** A file could be soft-deleted by the storage layer and by nothing a person could type. The gap was visible from the outside and impossible to act on: `file undelete` restores a soft-deleted file and `file destroy` refuses a live version with *"cannot destroy current live version — soft-delete first"* — so the CLI told you to do a thing it gave you no way to do. The capability was reachable over HTTP (`DELETE /api/v1/spaces/{space}/files/{path}`) the whole time, which made it worse: the surface everything local uses was the one that could not.
+
+  It is soft, and that is the design rather than a shortcut. The live copy goes, every version stays, `file undelete` brings it back, and `file destroy -v N` remains the way to remove one version for good. A context space is a record of what a team knew; making it easy to erase that record without meaning to would be the wrong favour.
+
+  The working tree copy is removed with it, or the next `file list` shows a file the space no longer has.
+
+- **`--if-version` on `file put` and `file delete`.** Both have always been compare-and-swap, but only against whatever was current at that instant — which stops two writes racing and cannot touch the case that actually loses work: somebody read a file an hour ago, wrote it back, and overwrote an edit made in between. `contextd` read the current version itself and passed it as the expectation, so a caller holding the version it read had no way to say so.
+
+  Now it can: `contextd file put team/policy.md --from - --if-version v4` is refused with a storage conflict if the file has moved past v4. That refusal is the point — an editor can tell somebody their copy is stale and let them reapply, instead of discarding the other version in silence. Anything built on `contextd` that shows a file and a save button wanted this and could not express it.
+
+  The flag takes the form every command prints (`v4`) or the bare number a script reads out of `--json`. Passing something that is neither is refused before it reaches storage, with the shape it wants in the message.
 
 ### Changed
 
@@ -217,7 +235,8 @@ The first substantial release: server, storage, governance and the AI-delivery s
 - Core solo workflow — `init solo`, the space model, `activate`, `status`.
 - Install scripts and the GoReleaser pipeline.
 
-[Unreleased]: https://github.com/orkcom-tech/contextverse/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/orkcom-tech/contextverse/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/orkcom-tech/contextverse/compare/v0.30.0...v1.0.0
 [0.7.0]: https://github.com/orkcom-tech/contextverse/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/orkcom-tech/contextverse/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/orkcom-tech/contextverse/compare/v0.4.0...v0.5.0
