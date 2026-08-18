@@ -17,6 +17,12 @@ concurrency:
 
 permissions:
   contents: write
+  # Keyless signing: cosign exchanges this for a short-lived Fulcio certificate
+  # bound to this workflow's identity, so there is no private key to lose and a
+  # verifier can ask "was this built by this repository's release workflow"
+  # rather than "do I recognise this key". ci.yml has always had it; these
+  # three did not, which is half of why they could not sign.
+  id-token: write
 
 jobs:
   guard:
@@ -121,6 +127,18 @@ jobs:
         env:
           TAG: ${{ steps.ver.outputs.tag }}
         run: bash scripts/ci/create-release-refs.sh "$TAG"
+
+      # Signing and the bill of materials, the same two tools ci.yml puts on
+      # the runner. Missing here until the first time this workflow was
+      # actually used: GoReleaser built every binary, every archive and every
+      # package for v1.0.0 and then failed on `exec: "syft": executable file
+      # not found in $PATH`, three minutes in, with the tag already pushed.
+      #
+      # A release path that is only exercised on the day it is needed is a
+      # release path nobody has run. All three of the manual ones had the same
+      # hole.
+      - uses: sigstore/cosign-installer@v3
+      - uses: anchore/sbom-action/download-syft@v0
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
