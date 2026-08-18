@@ -27,6 +27,12 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.26.x"
+          # The runner ships a cached Go and setup-go uses it unless told
+          # otherwise, so a minor pin alone does NOT mean "the newest patch":
+          # this job resolved 1.26.x to the cached 1.26.5 while the advisories
+          # it then reported were all fixed in 1.26.6. check-latest asks for
+          # the newest matching release instead of whatever the image has.
+          check-latest: true
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6

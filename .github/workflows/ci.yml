@@ -111,6 +111,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26.x"
+          # The runner ships a cached Go and setup-go uses it unless told
+          # otherwise, so a minor pin alone does NOT mean "the newest patch":
+          # this job resolved 1.26.x to the cached 1.26.5 while the advisories
+          # it then reported were all fixed in 1.26.6. check-latest asks for
+          # the newest matching release instead of whatever the image has.
+          check-latest: true
       - name: Download modules (retry)
         shell: bash
         run: |
@@ -162,17 +168,27 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26.x"
+          # The runner ships a cached Go and setup-go uses it unless told
+          # otherwise, so a minor pin alone does NOT mean "the newest patch":
+          # this job resolved 1.26.x to the cached 1.26.5 while the advisories
+          # it then reported were all fixed in 1.26.6. check-latest asks for
+          # the newest matching release instead of whatever the image has.
+          check-latest: true
       # Known vulnerabilities in what we actually call, not merely in what we
       # depend on: govulncheck reports a module only when a reachable path
       # exists, so it stays quiet enough to be worth reading.
       #
       # It also reports the STANDARD LIBRARY, which is what pinning the
       # toolchain costs: govulncheck@latest is installed on every run, so the
-      # day an advisory lands with a fix in a newer Go, a pinned older Go turns
+      # day an advisory lands with a fix in a newer Go, an older toolchain turns
       # this job red with no change to the code. That is the scanner working —
-      # the fix is to move the toolchain, not to stop asking. It is why the pin
-      # above is a minor line (1.26.x) rather than an exact patch: the newest
-      # patch of the supported major is what carries the fixes.
+      # the fix is to move the toolchain, not to stop asking.
+      #
+      # Which takes BOTH halves, and the first attempt only had one: a minor
+      # pin (1.26.x) does not mean "the newest patch", because setup-go uses
+      # the Go cached in the runner image unless check-latest asks it not to.
+      # It resolved to 1.26.5 and reported fourteen advisories every one of
+      # which was fixed in 1.26.6, released that morning.
       - name: Vulnerability check
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
@@ -196,6 +212,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26.x"
+          # The runner ships a cached Go and setup-go uses it unless told
+          # otherwise, so a minor pin alone does NOT mean "the newest patch":
+          # this job resolved 1.26.x to the cached 1.26.5 while the advisories
+          # it then reported were all fixed in 1.26.6. check-latest asks for
+          # the newest matching release instead of whatever the image has.
+          check-latest: true
       - name: Download modules (retry)
         shell: bash
         run: |
@@ -238,6 +260,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26.x"
+          # The runner ships a cached Go and setup-go uses it unless told
+          # otherwise, so a minor pin alone does NOT mean "the newest patch":
+          # this job resolved 1.26.x to the cached 1.26.5 while the advisories
+          # it then reported were all fixed in 1.26.6. check-latest asks for
+          # the newest matching release instead of whatever the image has.
+          check-latest: true
 
       # Signing and the bill of materials. Both are GoReleaser steps; these put
       # the tools on the runner.
