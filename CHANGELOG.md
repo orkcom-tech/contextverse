@@ -2,13 +2,17 @@
 
 All notable changes to `contextd` are recorded here.
 
-The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — with one caveat while the major version is `0`:
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> **Pre-1.0 compatibility.** Minor releases may change commands, flags, the HTTP API and the on-disk layout. Pin an exact version if you depend on any of them. Breaking changes are called out under **Changed** with the migration in the same bullet.
+> **From 1.0.0 the version means something.** Commands, flags, the HTTP API and the on-disk layout are stable within a major version: a minor release may add, and will not remove or change the meaning of what is there. Anything that has to break waits for a major, is called out under **Changed**, and carries its migration in the same bullet.
+>
+> Before 1.0.0 that promise did not hold, and the releases between 0.7.0 and 1.0.0 were cut without changelog entries — the git history is the record for those. Said rather than quietly skipped: a changelog with a hole in it is worth less than one that admits where the hole is.
 
 Releases are cut automatically from `main` by CI; the tag and the GitHub release are created in the same run.
 
 ## [Unreleased]
+
+## [1.0.0] — 2026-08-18
 
 ### Added
 
@@ -231,7 +235,8 @@ The first substantial release: server, storage, governance and the AI-delivery s
 - Core solo workflow — `init solo`, the space model, `activate`, `status`.
 - Install scripts and the GoReleaser pipeline.
 
-[Unreleased]: https://github.com/orkcom-tech/contextverse/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/orkcom-tech/contextverse/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/orkcom-tech/contextverse/compare/v0.30.0...v1.0.0
 [0.7.0]: https://github.com/orkcom-tech/contextverse/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/orkcom-tech/contextverse/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/orkcom-tech/contextverse/compare/v0.4.0...v0.5.0
