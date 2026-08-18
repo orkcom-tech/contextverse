@@ -1,0 +1,61 @@
+name: publish-packages
+
+# Point Homebrew and Scoop at a release that already exists.
+#
+# WHY THIS IS ITS OWN WORKFLOW. The tap and the bucket are bumped as the last
+# step of whichever workflow cut the release, which is right when that workflow
+# runs to the end and useless when it does not. v1.0.0 is the case: GoReleaser
+# built and published every archive, package, SBOM and signature, the step
+# after it never ran, and the only way to reach that step was to run GoReleaser
+# again — which fails, correctly, because a release cannot have two copies of
+# the same asset ("422 already_exists" on every file).
+#
+# So the packaging step needs a door of its own. It reads the release that is
+# there; it does not build anything and cannot damage what was published.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Released tag to point the tap and the bucket at (e.g. v1.0.0)"
+        required: true
+        type: string
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  packages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The release has to exist before anything is pointed at it, or the tap
+      # gets a version whose download URL is a 404 — which is worse than a tap
+      # that is one version behind.
+      - name: Require the release to exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "No release $TAG in $GITHUB_REPOSITORY. Cut it first." >&2
+            exit 1
+          fi
+          echo "Release $TAG is present."
+
+      - name: Publish Homebrew + Scoop
+        env:
+          PACKAGING_TOKEN: ${{ secrets.PACKAGING_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${PACKAGING_TOKEN}" ]]; then
+            echo "PACKAGING_TOKEN is not configured for this repository." >&2
+            exit 1
+          fi
+          bash scripts/ci/publish-packages.sh "$TAG"
