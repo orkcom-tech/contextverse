@@ -60,3 +60,33 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ inputs.tag }}
+
+      # And the packages, which this workflow did not do.
+      #
+      # It is the one reached when something has gone wrong with an automatic
+      # release, so stopping at the GitHub release left exactly the half-done
+      # state it exists to repair: binaries published, and `brew install` still
+      # handing people the previous version. v1.0.0 landed that way — the
+      # GitHub release complete, the tap still on 0.31.0.
+      #
+      # Skipped rather than failed without the token, because re-running this
+      # to fix a GitHub release is legitimate on a fork or a repository whose
+      # packaging secret is not configured, and a red run there would say
+      # something untrue about the release itself.
+      #
+      # The check is inside the step, not in `if:`. The secrets context is not
+      # available to a step-level condition — it silently evaluates to nothing,
+      # and the step would be skipped on every run including the ones that have
+      # the token.
+      - name: Publish Homebrew + Scoop
+        env:
+          PACKAGING_TOKEN: ${{ secrets.PACKAGING_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${PACKAGING_TOKEN}" ]]; then
+            echo "PACKAGING_TOKEN is not configured — the GitHub release is published, the tap and the bucket are not." >&2
+            exit 0
+          fi
+          bash scripts/ci/publish-packages.sh "$TAG"
